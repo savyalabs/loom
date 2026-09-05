@@ -274,6 +274,11 @@
        #?@(:clj [[:a :e :j] (loom.alg/bf-path-bi g4 :a :j)
                  true (some #(= % (loom.alg/bf-path-bi g5 :g :d)) [[:g :a :b :d] [:g :f :e :d]])])))
 
+(deftest bf-path-start-equals-end-test
+  (let [g (graph [1 2])]
+    (is (= [1] (bf-path g 1 1)))
+    (is (= [1 2] (bf-path g 1 2)))))
+
 (deftest simple-paths-test
   (are [expected got] (= expected got)
        [[0]] (simple-paths g6 0 0)
