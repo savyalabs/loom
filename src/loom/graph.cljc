@@ -464,7 +464,9 @@ on adjacency lists."
       (assoc-in g [:adj n2 n1 k] w))))
 
 (defn- remove-multi-edge [g e directed?]
-  (let [[n1 n2 k _] (multi-edge-data e nil)]
+  (let [[n1 n2 k] (if (instance? MultiEdge e)
+                    [(src e) (dest e) (edge-key e)]
+                    e)]
     (if (nil? k)
       (let [g (update-in g [:adj n1] dissoc n2)]
         (if directed? (update-in g [:in n2] dissoc n1)

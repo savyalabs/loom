@@ -6,7 +6,7 @@
                                       weighted-digraph-from-edges edges-with-ids
                                       out-edges-with-ids edge-key
                                       nodes edges has-node? has-edge? transpose fly-graph
-                                      remove-nodes
+                                      remove-nodes remove-edges
                                       weight graph? Graph directed? Digraph weighted?
                                       WeightedGraph subgraph add-path add-cycle)]
             [loom.attr :as attr]
@@ -31,6 +31,13 @@
           g (attr/add-attr g first-edge :label :first-label)]
       (is (= {:label :first-label} (attr/attrs g first-edge)))
       (is (nil? (attr/attr g second-edge :label))))))
+
+(deftest remove-keyed-multigraph-edge-test
+  (let [g (remove-edges (multigraph [1 2] [1 2]) [1 2 0])
+        es (vec (edges-with-ids g))]
+    (is (= 2 (count es)))
+    (is (= #{1} (set (map edge-key es))))
+    (is (= #{[1 2] [2 1]} (set (edges g))))))
 
 (deftest multidigraph-edge-direction-test
   (let [g (multidigraph [1 2 :a 3] [1 2 :b 4])]
