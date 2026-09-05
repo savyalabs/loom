@@ -1,7 +1,7 @@
 (ns loom.test.alg
-  (:require [loom.graph :refer [graph weighted-graph digraph weighted-digraph nodes
-                                successors remove-nodes add-nodes edges
-                                add-edges]]
+  (:require [loom.graph :refer [graph weighted-graph digraph weighted-digraph
+                                multidigraph nodes successors remove-nodes
+                                add-nodes edges edges-with-ids weight add-edges]]
             [loom.alg :refer [pre-traverse post-traverse pre-span topsort
                               bf-traverse bf-span bf-path
                               dijkstra-path dijkstra-path-dist
@@ -302,6 +302,18 @@
        [[:r :o :p] 10] (dijkstra-path-dist g2 :r :p)
        #{:r :g :b :o :p} (set (map first (dijkstra-traverse g2)))
        {:r {:o 8 :b 5} :b {:g 8} :o {:p 10}} (dijkstra-span g2 :r)))
+
+(deftest multigraph-weight-test
+  (let [g (multidigraph [:a :b 100]
+                        [:a :b 1]
+                        [:b :c 1])]
+    (testing "weight supports endpoint and keyed multigraph edges"
+      (is (= 1 (weight g (first (edges g)))))
+      (is (= #{1 100} (set (map #(weight g %) (edges-with-ids g)))))
+      (is (= 1 (weight g :a :b))))
+    (testing "weighted algorithms use the cheapest parallel edge"
+      (is (= [:a :b :c] (dijkstra-path g :a :c)))
+      (is (= 2 (get (first (bellman-ford g :a)) :c))))))
 
 (deftest validation-test
   (testing "path algorithms reject missing nodes with structured errors"

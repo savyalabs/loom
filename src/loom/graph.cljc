@@ -474,8 +474,14 @@ on adjacency lists."
                   (update-in g [:adj n2 n1] dissoc k))]
         g))))
 
+(defn- minimum-multi-weight [g n1 n2]
+  (when-let [weights (seq (vals (get-in g [:adj n1 n2])))]
+    (apply min weights)))
+
 (defn- multi-weight [g e]
-  (get-in g [:adj (src e) (dest e) (edge-key e)]))
+  (if-some [k (edge-key e)]
+    (get-in g [:adj (src e) (dest e) k])
+    (minimum-multi-weight g (src e) (dest e))))
 
 (defn- remove-multi-nodes [g ns directed?]
   (let [removed (set ns)
@@ -502,7 +508,7 @@ on adjacency lists."
   WeightedGraph
   {:weight* (fn
               ([g e] (multi-weight g e))
-              ([g n1 n2] (some-> (get-in g [:adj n1 n2]) vals first)))}
+              ([g n1 n2] (minimum-multi-weight g n1 n2)))}
   EditableGraph
   {:add-nodes* (fn [g ns] (update g :nodeset into ns))
    :add-edges* (fn [g es] (reduce #(add-multi-edge %1 %2 false) g es))
@@ -525,7 +531,7 @@ on adjacency lists."
   WeightedGraph
   {:weight* (fn
               ([g e] (multi-weight g e))
-              ([g n1 n2] (some-> (get-in g [:adj n1 n2]) vals first)))}
+              ([g n1 n2] (minimum-multi-weight g n1 n2)))}
   EditableGraph
   {:add-nodes* (fn [g ns] (update g :nodeset into ns))
    :add-edges* (fn [g es] (reduce #(add-multi-edge %1 %2 true) g es))
