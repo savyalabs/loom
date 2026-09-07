@@ -10,6 +10,7 @@
                               all-pairs-shortest-paths connected-components
                               connected? scc strongly-connected? connect
                               dag? shortest-path loners bellman-ford
+                              density
                               bipartite-color bipartite? bipartite-sets
                               coloring? greedy-coloring prim-mst-edges
                               prim-mst astar-path astar-dist
@@ -776,6 +777,13 @@
     (is (= 0 (clustering-coefficient path))))
   ;; fewer than two neighbors -> 0
   (is (= 0 (clustering-coefficient (graph [:a :b]) :a))))
+
+(deftest clustering-and-density-edge-cases-test
+  (let [weighted-triangle (weighted-graph [:a :b 1] [:b :c 1] [:c :a 1])]
+    (is (= 1 (clustering-coefficient weighted-triangle :a))))
+  (is (= 0 (clustering-coefficient (graph))))
+  (is (= 0 (density (graph))))
+  (is (= 0 (density (graph :a)))))
 
 (deftest centrality-algorithms-test
   (let [star (graph [:c :a] [:c :b] [:c :d])
