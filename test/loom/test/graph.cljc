@@ -105,6 +105,32 @@
       (is (nil? (get-in g [:attrs :a])))
       (is (empty? (attr/attrs g :b :a))))))
 
+(deftest multigraph-remove-nodes-prunes-attrs-test
+  (let [g (multigraph [:a :b :ab 1]
+                      [:b :c :bc 1])
+        edge (first (filter #(= :ab (edge-key %))
+                            (out-edges-with-ids g :a)))
+        g (-> g
+              (attr/add-attr :a :color :red)
+              (attr/add-attr edge :kind :rail))
+        pruned (remove-nodes g :a)]
+    (is (nil? (get-in pruned [:attrs :a])))
+    (is (nil? (try
+                (attr/attr pruned :a :color)
+                (catch #?(:clj Throwable :cljs :default) _ ::threw))))
+    (is (nil? (get-in pruned [:attrs :b :loom.attr/edge-attrs :ab])))
+    (is (nil? (attr/attr pruned edge :kind)))))
+
+(deftest subgraph-prunes-attrs-like-remove-nodes-test
+  (let [g (-> (graph [:a :b] [:b :c])
+              (attr/add-attr :a :color :red)
+              (attr/add-attr [:a :b] :kind :rail))
+        removed (remove-nodes g :a)
+        induced (subgraph g [:b :c])]
+    (is (= (:attrs removed) (:attrs induced)))
+    (is (nil? (get-in induced [:attrs :a])))
+    (is (nil? (attr/attr induced :b :a :kind)))))
+
 (deftest weight-edge-arity-test
   ;; weight on an edge must dispatch to (weight* g e), not (weight* g src dest).
   ;; These differ when an edge is not determined by its endpoints, as in

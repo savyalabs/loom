@@ -36,7 +36,8 @@ loom.graph. Attributes can provide labels and styles (color, thickness, and so o
                          (update-in g [:attrs n2 ::edge-attrs n1] dissoc k)))))
    :attr (fn
            ([g node-or-edge k]
-             (if (has-node? g node-or-edge)
+             (if (or (has-node? g node-or-edge)
+                     (not (satisfies? graph/Edge node-or-edge)))
                (get-in g [:attrs node-or-edge k])
                (attr g (src node-or-edge) (dest node-or-edge) k)))
            ([g n1 n2 k]
@@ -88,7 +89,8 @@ loom.graph. Attributes can provide labels and styles (color, thickness, and so o
                            (keys (get-in g [:adj n1 n2])))))
    :attr (fn
            ([g node-or-edge k]
-            (if (has-node? g node-or-edge)
+            (if (or (has-node? g node-or-edge)
+                    (not (satisfies? graph/Edge node-or-edge)))
               (get-in g [:attrs node-or-edge k])
               (get-in g [:attrs (src node-or-edge) ::edge-attrs (graph/edge-key node-or-edge) k])))
            ([g n1 n2 k]

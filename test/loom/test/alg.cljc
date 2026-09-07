@@ -1,7 +1,8 @@
 (ns loom.test.alg
   (:require [loom.graph :refer [graph weighted-graph digraph weighted-digraph
-                                multidigraph nodes successors remove-nodes
+                                multigraph multidigraph nodes successors remove-nodes
                                 add-nodes edges edges-with-ids weight add-edges]]
+            [loom.attr :as attr]
             [loom.alg :refer [pre-traverse post-traverse pre-span topsort
                               bf-traverse bf-span bf-path
                               dijkstra-path dijkstra-path-dist
@@ -787,3 +788,19 @@
     (is (= #{:a :b :c} (set (nodes (k-core g 2)))))
     (is (= 2 (get (k-core triangle) :a)))
     (is (= 2 (get (k-core triangle) :b)))))
+
+(deftest k-core-prunes-multigraph-attrs-test
+  (let [g (multigraph [:a :b :ab 1]
+                      [:b :c :bc 1]
+                      [:c :a :ca 1]
+                      [:a :leaf :leaf-edge 1])
+        leaf-edge (first (filter #(= :leaf-edge (loom.graph/edge-key %))
+                                 (edges-with-ids g)))
+        core (k-core (-> g
+                         (attr/add-attr :leaf :color :red)
+                         (attr/add-attr leaf-edge :kind :twig))
+                     2)]
+    (is (= #{:a :b :c} (set (nodes core))))
+    (is (nil? (get-in core [:attrs :leaf])))
+    (is (nil? (get-in core [:attrs :a :loom.attr/edge-attrs :leaf-edge])))
+    (is (nil? (attr/attr core leaf-edge :kind)))))

@@ -119,27 +119,37 @@ on adjacency lists."
   "Drop attribute entries for removed nodes: their own node/edge attrs, plus
   back-reference edge attrs that surviving nodes hold toward them. The
   ::loom.attr/edge-attrs key is named as a literal to avoid a cyclic require."
-  [attrs removed]
-  (let [removed (set removed)]
+  [g removed]
+  (let [removed (set removed)
+        multigraph? (satisfies? MultiGraph g)
+        removed-edge-keys
+        (when multigraph?
+          (into #{} (for [[n1 nbrs] (:adj g)
+                          [n2 keyed] nbrs
+                          :when (or (removed n1) (removed n2))
+                          k (keys keyed)]
+                      k)))
+        edge-attr-keys (if multigraph? removed-edge-keys removed)]
     (persistent!
      (reduce-kv
       (fn [m node amap]
         (if (removed node)
           m
           (let [ea (get amap :loom.attr/edge-attrs)
-                ea (when ea (apply dissoc ea removed))]
+                ea (when ea (apply dissoc ea edge-attr-keys))]
             (assoc! m node (if (seq ea)
                              (assoc amap :loom.attr/edge-attrs ea)
                              (dissoc amap :loom.attr/edge-attrs))))))
       (transient {})
-      attrs))))
+      (:attrs g)))))
 
 (defn remove-nodes
   "Removes nodes from graph g"
   [g & nodes]
-  (let [g (remove-nodes* g nodes)]
-    (if (:attrs g)
-      (assoc g :attrs (prune-attrs (:attrs g) nodes))
+  (let [attrs (when (:attrs g) (prune-attrs g nodes))
+        g (remove-nodes* g nodes)]
+    (if attrs
+      (assoc g :attrs attrs)
       g)))
 
 (defn remove-edges
@@ -630,7 +640,7 @@ on adjacency lists."
 (defn subgraph
   "Returns a graph with only the given nodes"
   [g ns]
-  (remove-nodes* g (remove (set ns) (nodes g))))
+  (apply remove-nodes g (remove (set ns) (nodes g))))
 
 (defn add-path
   "Adds a path of edges connecting the given nodes in order"
