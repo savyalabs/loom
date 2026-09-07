@@ -924,48 +924,73 @@ can use these functions."
           cycle-data children))
 
 (defn- unblock-nodes
-  "Helper for digraph-all-cycles. Unblock curr and, recursively, the nodes
+  "Helper for digraph-all-cycles. Unblock curr and the nodes
   blocked on it (tracked in bset/bmap)."
-  [{:keys [bmap] :as cycle-data} curr unblocked]
-  (if (contains? unblocked curr)
-    cycle-data
-    (as-> cycle-data cd
-      (update cd :bset disj curr)
-      (reduce (fn [acc node-to-unblock]
-                (unblock-nodes acc node-to-unblock (conj unblocked curr)))
-              cd (get bmap curr))
-      (update cd :bmap dissoc curr))))
+  [cycle-data curr unblocked]
+  (loop [cycle-data cycle-data
+         work [[:visit curr unblocked]]]
+    (if-let [[operation node seen] (peek work)]
+      (case operation
+        :finish (recur (update cycle-data :bmap dissoc node) (pop work))
+        :visit (if (contains? seen node)
+                 (recur cycle-data (pop work))
+                 (let [seen (conj seen node)
+                       blocked-nodes (get-in cycle-data [:bmap node])
+                       work (into (conj (pop work) [:finish node])
+                                  (map #(vector :visit % seen)
+                                       (reverse blocked-nodes)))]
+                   (recur (update cycle-data :bset disj node) work))))
+      cycle-data)))
 
 (defn- find-all-cycles
   "Helper for digraph-all-cycles. Returns all cycles through start reachable
   from curr along path."
   [g start curr cycle path rset bset bmap]
-  (as-> {:cycle? cycle
-         :all-cycles []
-         :bset (conj bset curr)
-         :rset rset
-         :bmap bmap} cycle-data
-    (reduce
-     (fn [{:keys [bset rset bmap] :as acc} child]
-       (cond
-         (= child start) (-> acc
-                             (assoc :cycle? true)
-                             (update :all-cycles conj path))
+  (let [new-frame (fn [curr cycle path bset bmap]
+                    {:curr curr
+                     :cycle? cycle
+                     :all-cycles []
+                     :path path
+                     :children (seq (successors g curr))
+                     :bset (conj bset curr)
+                     :bmap bmap})]
+    (loop [frames [(new-frame curr cycle path bset bmap)]]
+      (let [{:keys [curr cycle? all-cycles path children bset bmap] :as frame}
+            (peek frames)]
+        (if-let [child (first children)]
+          (let [frames (conj (pop frames) (assoc frame :children (next children)))]
+            (cond
+              (= child start)
+              (recur (conj (pop frames)
+                           (-> (peek frames)
+                               (assoc :cycle? true)
+                               (update :all-cycles conj path))))
 
-         (or (contains? rset child)
-             (contains? bset child)) acc
+              (or (contains? rset child) (contains? bset child))
+              (recur frames)
 
-         :else
-         (let [new-acc (find-all-cycles g start child false (conj path child)
-                                        rset bset bmap)]
-           (-> new-acc
-               (update :cycle? #(or %1 %2) (:cycle? acc))
-               (update :all-cycles concat (:all-cycles acc))))))
-     cycle-data (successors g curr))
-    (if (:cycle? cycle-data)
-      ;; the empty unblocked set keeps unblock-nodes from looping forever
-      (unblock-nodes cycle-data curr #{})
-      (insert-in-blocked-map cycle-data curr (successors g curr)))))
+              :else
+              (recur (conj frames (new-frame child false (conj path child)
+                                            bset bmap)))))
+          (let [cycle-data {:cycle? cycle? :all-cycles all-cycles
+                            :bset bset :rset rset :bmap bmap}
+                cycle-data (if cycle?
+                             ;; The empty unblocked set prevents cycles in bmap.
+                             (unblock-nodes cycle-data curr #{})
+                             (insert-in-blocked-map cycle-data curr
+                                                     (successors g curr)))
+                frames (pop frames)]
+            (if-let [parent (peek frames)]
+              (recur (conj (pop frames)
+                           (-> cycle-data
+                               (assoc :curr (:curr parent)
+                                      :path (:path parent)
+                                      :children (:children parent)
+                                      :cycle? (or (:cycle? cycle-data)
+                                                  (:cycle? parent))
+                                      :all-cycles (into (:all-cycles cycle-data)
+                                                        (:all-cycles parent))))))
+              cycle-data)))))))
 
 (defn digraph-all-cycles
   "Returns all simple cycles in a directed graph, each as a vector of nodes.
@@ -977,10 +1002,10 @@ can use these functions."
       (reduce (fn [{:keys [ans rset]} curr]
                 (let [{:keys [all-cycles rset]}
                       (find-all-cycles g curr curr false [curr] rset #{} {})]
-                  {:ans (concat ans all-cycles)
+                  {:ans (into ans all-cycles)
                    :rset (conj rset curr)}))
               cycle-data (nodes g))
-      (:ans cycle-data))
+      (or (seq (:ans cycle-data)) '()))
     ::not-a-directed-graph))
 
 (defn clustering-coefficient
@@ -1181,36 +1206,52 @@ can use these functions."
                            (swap! stack pop)
                            (if (= e edge) (conj es e) (recur (conj es e)))))]
                 (swap! components conj (set (mapcat identity es)))))
-            (visit [u]
+            (discover! [u]
               (swap! time inc)
               (swap! discovery assoc u @time)
-              (swap! low assoc u @time)
-              (loop [children 0 nbrs (seq (successors g u))]
-                (if-let [v (first nbrs)]
-                  (if-not (contains? @discovery v)
-                    (do
-                      (swap! parent assoc v u)
-                      (swap! stack conj [u v])
-                      (visit v)
-                      (swap! low update u min (@low v))
-                      (when (or (and (nil? (@parent u)) (> (inc children) 1))
-                                (and (some? (@parent u)) (>= (@low v) (@discovery u))))
-                        (swap! articulation conj u))
-                      (when (< (@low v) (@discovery u)) nil)
-                      (when (> (@low v) (@discovery u))
-                        (swap! bridges conj (vec (sort-by str [u v]))))
-                      (when (>= (@low v) (@discovery u))
-                        (pop-component [u v]))
-                      (recur (inc children) (next nbrs)))
-                    (do
-                      (when (and (not= v (@parent u))
-                                 (< (@discovery v) (@discovery u)))
-                        (swap! stack conj [u v])
-                        (swap! low update u min (@discovery v)))
-                      (recur children (next nbrs))))
-                  (when (and (nil? (@parent u)) (= children 1))
-                    ;; A root with one child is not an articulation point.
-                    (swap! articulation disj u)))))]
+              (swap! low assoc u @time))
+            (visit [start]
+              (discover! start)
+              (loop [frames [{:node start :children 0
+                              :neighbours (seq (successors g start))}]]
+                (let [{:keys [node children neighbours] :as frame} (peek frames)]
+                  (if-let [v (first neighbours)]
+                    (let [frames (conj (pop frames)
+                                       (assoc frame :neighbours (next neighbours)))]
+                      (if-not (contains? @discovery v)
+                        (do
+                          (swap! parent assoc v node)
+                          (swap! stack conj [node v])
+                          (discover! v)
+                          (recur (conj (pop frames)
+                                       (update (peek frames) :children inc)
+                                       {:node v :children 0
+                                        :neighbours (seq (successors g v))})))
+                        (do
+                          (when (and (not= v (@parent node))
+                                     (< (@discovery v) (@discovery node)))
+                            (swap! stack conj [node v])
+                            (swap! low update node min (@discovery v)))
+                          (recur frames))))
+                    (let [frames (pop frames)]
+                      (if-let [parent-frame (peek frames)]
+                        (let [u (:node parent-frame)]
+                          (swap! low update u min (@low node))
+                          (when (or (and (nil? (@parent u))
+                                         (> (:children parent-frame) 1))
+                                    (and (some? (@parent u))
+                                         (>= (@low node) (@discovery u))))
+                            (swap! articulation conj u))
+                          (when (> (@low node) (@discovery u))
+                            (swap! bridges conj (vec (sort-by str [u node]))))
+                          (when (>= (@low node) (@discovery u))
+                            (pop-component [u node]))
+                          (recur frames))
+                        (do
+                          (when (= children 1)
+                            ;; A root with one child is not an articulation point.
+                            (swap! articulation disj node))
+                          nil)))))))]
       (doseq [v (nodes g) :when (not (contains? @discovery v))]
         (visit v)
         (when (and (empty? (successors g v)) (not (some #{#{v}} @components)))

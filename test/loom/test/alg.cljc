@@ -826,3 +826,12 @@
     (is (nil? (get-in core [:attrs :leaf])))
     (is (nil? (get-in core [:attrs :a :loom.attr/edge-attrs :leaf-edge])))
     (is (nil? (attr/attr core leaf-edge :kind)))))
+
+(deftest deep-structural-analysis-test
+  (let [node-count 20000
+        path-edges (mapv (fn [n] [n (inc n)]) (range (dec node-count)))
+        path (apply graph path-edges)
+        directed-path (apply digraph path-edges)]
+    (is (= (- node-count 2) (count (articulation-points path))))
+    (is (= (dec node-count) (count (bridges path))))
+    (is (= '() (digraph-all-cycles directed-path)))))
