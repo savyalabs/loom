@@ -107,6 +107,7 @@
   (let [nodes (nodes g)
         N (vec nodes) ;; nodes
         nc (count N)
+        _ (assert (pos? nc) "Graph has no nodes")
         NI (zipmap nodes (range nc)) ;; node indices
         D (mapv #(or (attr g % demand) 0) nodes) ;; node demands
 
@@ -119,17 +120,15 @@
 
         C (mapv #(or (attr g % cost) 0) edges) ;; edge costs; default 0
         _U (mapv #(or (attr g % capacity) 0) edges)
-        inf (or (* 3 ;; take max across three dimensions and multiply by three.
-                   (max (apply + _U) ;; sum of capacities
-                        (apply + (map abs C)) ;; sum of costs
-                        (apply max (map abs D)) ;; max demand
-                        ))
-                1 ;; default
-                )
+        m (* 3 ;; take max across three dimensions and multiply by three.
+             (max (apply + _U) ;; sum of capacities
+                  (apply + (map abs C)) ;; sum of costs
+                  (apply max (map abs D)) ;; max demand
+                  ))
+        inf (if (zero? m) 1 m)
         U (mapv #(or (attr g % capacity) inf) edges) ;; edge capacities; default "infinity"
         ]
     ;; quick checks
-    (assert (pos? nc) "Graph has no nodes")
     (assert (zero? (apply + D)) "Total node demand is not zero")
     (doseq [[e u] (map vector EI U)]
       (assert (not (neg? u)) (str "edge " e " has negative capacity")))
@@ -471,6 +470,10 @@
         [Wn We] (find-cycle omni i p q)
         [j s t] (find-leaving-edge omni Wn We)
         capacity (residual-capacity omni j s)]
+    (when (= capacity (:inf omni))
+      (throw (ex-info "Negative-cost cycle has infinite capacity"
+                      {:type :loom.network-simplex/unbounded
+                       :unbounded true})))
     (as-> omni omni
       (assoc omni :blockmark f)
           (if-not (pos? capacity)
