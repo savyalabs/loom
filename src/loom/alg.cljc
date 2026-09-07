@@ -229,7 +229,7 @@ can use these functions."
   "Initializes path cost estimates and paths from source to all vertices,
    for Bellman-Ford algorithm"
   [graph start]
-  (let [nodes (disj (nodes graph) start)
+  (let [nodes (disj (set (nodes graph)) start)
         path-costs {start 0}
         paths {start nil}
         infinities (repeat #?(:clj Double/POSITIVE_INFINITY

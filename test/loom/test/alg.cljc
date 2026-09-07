@@ -1,7 +1,8 @@
 (ns loom.test.alg
   (:require [loom.graph :refer [graph weighted-graph digraph weighted-digraph
                                 multigraph multidigraph nodes successors remove-nodes
-                                add-nodes edges edges-with-ids weight add-edges]]
+                                add-nodes edges edges-with-ids weight add-edges
+                                fly-graph]]
             [loom.attr :as attr]
             [loom.alg :refer [pre-traverse post-traverse pre-span topsort
                               bf-traverse bf-span bf-path
@@ -504,6 +505,14 @@
                   :c [:e :b :c],
                   :b [:e :b],
                   :d [:e :b :d]}] g12 :e))
+
+(deftest bellman-ford-fly-graph-test
+  (let [g (fly-graph :nodes [1 2 3]
+                     :successors (fn [node] ({1 [2] 2 [3] 3 []} node))
+                     :weight (constantly 1))]
+    (is (= [{1 0 2 1 3 2}
+            {1 [1] 2 [1 2] 3 [1 2 3]}]
+           (bellman-ford g 1)))))
 
 (deftest bipartite-test
   (are [expected got] (= expected got)
