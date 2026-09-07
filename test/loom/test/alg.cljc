@@ -1,7 +1,8 @@
 (ns loom.test.alg
   (:require [loom.graph :refer [graph weighted-graph digraph weighted-digraph
                                 multigraph multidigraph nodes successors remove-nodes
-                                add-nodes edges edges-with-ids weight add-edges]]
+                                add-nodes edges edges-with-ids weight add-edges
+                                fly-graph]]
             [loom.attr :as attr]
             [loom.alg :refer [pre-traverse post-traverse pre-span topsort
                               bf-traverse bf-span bf-path
@@ -10,6 +11,7 @@
                               all-pairs-shortest-paths connected-components
                               connected? scc strongly-connected? connect
                               dag? shortest-path loners bellman-ford
+                              density
                               bipartite-color bipartite? bipartite-sets
                               coloring? greedy-coloring prim-mst-edges
                               prim-mst astar-path astar-dist
@@ -504,6 +506,14 @@
                   :b [:e :b],
                   :d [:e :b :d]}] g12 :e))
 
+(deftest bellman-ford-fly-graph-test
+  (let [g (fly-graph :nodes [1 2 3]
+                     :successors (fn [node] ({1 [2] 2 [3] 3 []} node))
+                     :weight (constantly 1))]
+    (is (= [{1 0 2 1 3 2}
+            {1 [1] 2 [1 2] 3 [1 2 3]}]
+           (bellman-ford g 1)))))
+
 (deftest bipartite-test
   (are [expected got] (= expected got)
     nil (bipartite-color g1)
@@ -777,6 +787,13 @@
   ;; fewer than two neighbors -> 0
   (is (= 0 (clustering-coefficient (graph [:a :b]) :a))))
 
+(deftest clustering-and-density-edge-cases-test
+  (let [weighted-triangle (weighted-graph [:a :b 1] [:b :c 1] [:c :a 1])]
+    (is (= 1 (clustering-coefficient weighted-triangle :a))))
+  (is (= 0 (clustering-coefficient (graph))))
+  (is (= 0 (density (graph))))
+  (is (= 0 (density (graph :a)))))
+
 (deftest centrality-algorithms-test
   (let [star (graph [:c :a] [:c :b] [:c :d])
         path (graph [:a :b] [:b :c] [:c :d])
@@ -826,3 +843,12 @@
     (is (nil? (get-in core [:attrs :leaf])))
     (is (nil? (get-in core [:attrs :a :loom.attr/edge-attrs :leaf-edge])))
     (is (nil? (attr/attr core leaf-edge :kind)))))
+
+(deftest deep-structural-analysis-test
+  (let [node-count 20000
+        path-edges (mapv (fn [n] [n (inc n)]) (range (dec node-count)))
+        path (apply graph path-edges)
+        directed-path (apply digraph path-edges)]
+    (is (= (- node-count 2) (count (articulation-points path))))
+    (is (= (dec node-count) (count (bridges path))))
+    (is (= '() (digraph-all-cycles directed-path)))))
