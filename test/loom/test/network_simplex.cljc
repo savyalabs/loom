@@ -245,6 +245,25 @@
       (is (= flow
              {1 {1 2}})))))
 
+(deftest uncapacitated-negative-self-loop-is-unbounded-test
+  (testing "An uncapacitated negative-cost cycle is unbounded"
+    (let [g (build-graph [[1 1 {:cost -1}]] [])]
+      (try
+        (solve g)
+        (is false "Expected solve to signal an unbounded problem")
+        (catch #?(:clj clojure.lang.ExceptionInfo
+                  :cljs js/Error) error
+          (is (:unbounded (ex-data error))))))))
+
+(deftest all-zero-input-uses-positive-infinity-sentinel-test
+  (testing "All-zero magnitudes still give uncapacitated edges positive capacity"
+    (let [g (build-graph [[1 1 {:cost 0}]] [[1 {:demand 0}]])
+          extracted (#'loom.network-simplex/extract
+                     g
+                     {:capacity :capacity :cost :cost :demand :demand})]
+      (is (= 1 (:inf extracted)))
+      (is (= [1] (:U extracted))))))
+
 (def bone-shaped
   (build-graph
    [[0 1 {:capacity 4}]
