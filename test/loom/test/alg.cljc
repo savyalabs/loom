@@ -363,12 +363,15 @@
   (testing "path algorithms reject missing nodes with structured errors"
     (is (= {:type :loom.alg/missing-node :node :missing :operation :bf-path}
            (exception-data #(bf-path g4 :a :missing)))))
-  (testing "Dijkstra and A* reject negative weights"
+  (testing "Dijkstra-based algorithms reject negative weights"
     (let [g (weighted-digraph [:a :b -1])]
       (is (= {:type :loom.alg/negative-weight :algorithm :dijkstra}
              (exception-data #(dijkstra-path g :a :b))))
       (is (= {:type :loom.alg/negative-weight :algorithm :astar}
              (exception-data #(astar-path g :a :b nil))))
+      (is (= {:type :loom.alg/negative-weight
+              :algorithm :betweenness-centrality}
+             (exception-data #(betweenness-centrality g))))
       (is (vector? (bellman-ford g :a))))))
 
 (deftest johnson-test
@@ -879,6 +882,12 @@
       (println (format "PageRank benchmark (400 nodes, 5 iterations): legacy %.2f ms, optimized %.2f ms"
                        (/ legacy-ns 1000000.0) (/ optimized-ns 1000000.0)))
       (is (< optimized-ns (* 0.5 legacy-ns))))))
+
+(deftest weighted-betweenness-centrality-test
+  (let [g (weighted-graph [:a :b 1]
+                          [:b :c 1]
+                          [:a :c 100])]
+    (is (= 1.0 (get (betweenness-centrality g) :b)))))
 
 (deftest structural-algorithms-test
   (let [g (graph [:a :b] [:b :c] [:c :a] [:b :d] [:d :e])

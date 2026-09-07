@@ -1106,39 +1106,108 @@ can use these functions."
                0
                (/ reachable (reduce + (vals ds))))])))
 
+(defn- brandes-bfs [g source]
+  (loop [queue (conj #?(:clj clojure.lang.PersistentQueue/EMPTY
+                         :cljs cljs.core/PersistentQueue.EMPTY) source)
+         stack []
+         predecessors {}
+         path-counts {source 1.0}
+         distances {source 0}]
+    (if (empty? queue)
+      [stack predecessors path-counts]
+      (let [v (peek queue)
+            next-distance (inc (get distances v))
+            [queue predecessors path-counts distances]
+            (reduce
+             (fn [[queue predecessors path-counts distances] w]
+               (let [unseen? (not (contains? distances w))
+                     queue (if unseen? (conj queue w) queue)
+                     distances (if unseen?
+                                 (assoc distances w next-distance)
+                                 distances)]
+                 (if (= (get distances w) next-distance)
+                   [queue
+                    (update predecessors w (fnil conj []) v)
+                    (update path-counts w (fnil + 0.0) (get path-counts v))
+                    distances]
+                   [queue predecessors path-counts distances])))
+             [(pop queue) predecessors path-counts distances]
+             (successors g v))]
+        (recur queue (conj stack v) predecessors path-counts distances)))))
+
+(defn- brandes-dijkstra [g source]
+  (loop [queue (pm/priority-map source 0)
+         stack []
+         predecessors {}
+         path-counts {source 1.0}
+         distances {source 0}]
+    (if (empty? queue)
+      [stack predecessors path-counts]
+      (let [[v distance-v] (peek queue)
+            [queue predecessors path-counts distances]
+            (reduce
+             (fn [[queue predecessors path-counts distances] w]
+               (let [candidate-distance (+ distance-v (weight g v w))
+                     known-distance (get distances w)]
+                 (cond
+                   (or (nil? known-distance)
+                       (< candidate-distance known-distance))
+                   [(assoc queue w candidate-distance)
+                    (assoc predecessors w [v])
+                    (assoc path-counts w (get path-counts v))
+                    (assoc distances w candidate-distance)]
+
+                   (= candidate-distance known-distance)
+                   [queue
+                    (update predecessors w (fnil conj []) v)
+                    (update path-counts w (fnil + 0.0) (get path-counts v))
+                    distances]
+
+                   :else
+                   [queue predecessors path-counts distances])))
+             [(pop queue) predecessors path-counts distances]
+             (successors g v))]
+        (recur queue (conj stack v) predecessors path-counts distances)))))
+
+(defn- accumulate-betweenness
+  [scores source stack predecessors path-counts]
+  (loop [stack stack
+         dependencies {}
+         scores scores]
+    (if (empty? stack)
+      scores
+      (let [w (peek stack)
+            dependency (get dependencies w 0.0)
+            coefficient (/ (+ 1.0 dependency) (get path-counts w))
+            dependencies
+            (reduce (fn [dependencies v]
+                      (update dependencies v (fnil + 0.0)
+                              (* (get path-counts v) coefficient)))
+                    dependencies
+                    (get predecessors w []))
+            scores (if (= w source)
+                     scores
+                     (update scores w + dependency))]
+        (recur (pop stack) dependencies scores)))))
+
 (defn betweenness-centrality
-  "Returns normalized betweenness centrality by shortest-path counting."
+  "Returns normalized betweenness centrality by shortest-path counting.
+  Uses edge weights for weighted graphs."
   [g]
   (let [vs (vec (nodes g))
-        shortest-counts (fn [source]
-                          (loop [q (conj #?(:clj clojure.lang.PersistentQueue/EMPTY
-                                             :cljs cljs.core/PersistentQueue.EMPTY) source)
-                                 dist {source 0} sigma {source 1.0}]
-                            (if-let [v (peek q)]
-                              (let [q (pop q)
-                                    [q dist sigma]
-                                    (reduce (fn [[q ds ss] w]
-                                              (cond
-                                                (not (contains? ds w))
-                                                [(conj q w) (assoc ds w (inc (ds v)))
-                                                 (assoc ss w (ss v))]
-                                                (= (ds w) (inc (ds v)))
-                                                [q ds (update ss w + (ss v))]
-                                                :else [q ds ss]))
-                                            [q dist sigma] (successors g v))]
-                                (recur q dist sigma))
-                              [dist sigma])))
-        cached (into {} (map (fn [s] [s (shortest-counts s)]) vs))
-        raw (into {} (for [v vs]
-                       [v (reduce + (for [s vs :when (not= s v)
-                                          t vs :when (and (not= t v) (not= t s))
-                                          :let [[ds ss] (cached s)
-                                                [dt st] (cached v)]
-                                          :when (and (contains? ds v)
-                                                      (contains? dt t)
-                                                      (= (ds t) (+ (ds v) (dt t))))]
-                                      (/ (* (ss v) (st t))
-                                         (ss t))))]))
+        weighted-graph? (weighted? g)
+        _ (when weighted-graph?
+            (validate-non-negative-weights! g :betweenness-centrality))
+        shortest-paths (if weighted-graph?
+                         (partial brandes-dijkstra g)
+                         (partial brandes-bfs g))
+        raw (reduce (fn [scores source]
+                      (let [[stack predecessors path-counts]
+                            (shortest-paths source)]
+                        (accumulate-betweenness scores source stack
+                                                predecessors path-counts)))
+                    (zipmap vs (repeat 0.0))
+                    vs)
         denominator (* (max 1 (dec (count vs)))
                        (max 1 (- (count vs) 2)))
         scale (/ 1.0 denominator)]
