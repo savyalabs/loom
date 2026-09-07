@@ -119,27 +119,41 @@ on adjacency lists."
   "Drop attribute entries for removed nodes: their own node/edge attrs, plus
   back-reference edge attrs that surviving nodes hold toward them. The
   ::loom.attr/edge-attrs key is named as a literal to avoid a cyclic require."
-  [attrs removed]
-  (let [removed (set removed)]
+  [g removed]
+  (let [removed (set removed)
+        multigraph? (satisfies? MultiGraph g)
+        removed-edge-keys-by-node
+        (when multigraph?
+          (into {} (keep (fn [[node nbrs]]
+                           (let [ks (into #{} (for [[n2 keyed] nbrs
+                                                   :when (contains? removed n2)
+                                                   k (keys keyed)]
+                                               k))]
+                             (when (seq ks) [node ks]))))
+                (:adj g)))]
     (persistent!
      (reduce-kv
       (fn [m node amap]
-        (if (removed node)
+        (if (contains? removed node)
           m
-          (let [ea (get amap :loom.attr/edge-attrs)
-                ea (when ea (apply dissoc ea removed))]
+          (let [edge-attr-keys (if multigraph?
+                                 (get removed-edge-keys-by-node node)
+                                 removed)
+                ea (get amap :loom.attr/edge-attrs)
+                ea (when ea (apply dissoc ea edge-attr-keys))]
             (assoc! m node (if (seq ea)
                              (assoc amap :loom.attr/edge-attrs ea)
                              (dissoc amap :loom.attr/edge-attrs))))))
       (transient {})
-      attrs))))
+      (:attrs g)))))
 
 (defn remove-nodes
   "Removes nodes from graph g"
   [g & nodes]
-  (let [g (remove-nodes* g nodes)]
-    (if (:attrs g)
-      (assoc g :attrs (prune-attrs (:attrs g) nodes))
+  (let [attrs (when (:attrs g) (prune-attrs g nodes))
+        g (remove-nodes* g nodes)]
+    (if attrs
+      (assoc g :attrs attrs)
       g)))
 
 (defn remove-edges
@@ -464,7 +478,9 @@ on adjacency lists."
       (assoc-in g [:adj n2 n1 k] w))))
 
 (defn- remove-multi-edge [g e directed?]
-  (let [[n1 n2 k _] (multi-edge-data e nil)]
+  (let [[n1 n2 k] (if (instance? MultiEdge e)
+                    [(src e) (dest e) (edge-key e)]
+                    e)]
     (if (nil? k)
       (let [g (update-in g [:adj n1] dissoc n2)]
         (if directed? (update-in g [:in n2] dissoc n1)
@@ -474,25 +490,33 @@ on adjacency lists."
                   (update-in g [:adj n2 n1] dissoc k))]
         g))))
 
+(defn- minimum-multi-weight [g n1 n2]
+  (when-let [weights (seq (vals (get-in g [:adj n1 n2])))]
+    (apply min weights)))
+
 (defn- multi-weight [g e]
-  (get-in g [:adj (src e) (dest e) (edge-key e)]))
+  (if-some [k (edge-key e)]
+    (get-in g [:adj (src e) (dest e) k])
+    (minimum-multi-weight g (src e) (dest e))))
 
 (defn- remove-multi-nodes [g ns directed?]
   (let [removed (set ns)
         strip (fn [adj]
                 (into {} (map (fn [[n nbrs]]
-                                [n (apply dissoc nbrs removed)]) adj)))]
-    (assoc (assoc (assoc g
-                         :nodeset (apply disj (:nodeset g) removed))
-                  :adj (strip (apply dissoc (:adj g) removed)))
-           :in (when directed? (strip (apply dissoc (:in g) removed))))))
+                                [n (apply dissoc nbrs removed)]) adj)))
+        g (assoc g
+                 :nodeset (apply disj (:nodeset g) removed)
+                 :adj (strip (apply dissoc (:adj g) removed)))]
+    (if directed?
+      (assoc g :in (strip (apply dissoc (:in g) removed)))
+      g)))
 
 (extend BasicEditableMultiGraph
   Graph
   {:nodes (fn [g] (:nodeset g))
    :edges (fn [g] (for [e (multi-all-edge-objects g)] [(src e) (dest e)]))
    :has-node? (fn [g node] (contains? (:nodeset g) node))
-   :has-edge? (fn [g n1 n2] (seq (get-in g [:adj n1 n2])))
+   :has-edge? (fn [g n1 n2] (boolean (seq (get-in g [:adj n1 n2]))))
    :successors* (fn [g node] (keys (get-in g [:adj node])))
    :out-degree (fn [g node] (reduce + 0 (map count (vals (get-in g [:adj node])))))
    :out-edges (fn [g node] (for [e (multi-edge-objects g node)] [(src e) (dest e)]))}
@@ -502,7 +526,7 @@ on adjacency lists."
   WeightedGraph
   {:weight* (fn
               ([g e] (multi-weight g e))
-              ([g n1 n2] (some-> (get-in g [:adj n1 n2]) vals first)))}
+              ([g n1 n2] (minimum-multi-weight g n1 n2)))}
   EditableGraph
   {:add-nodes* (fn [g ns] (update g :nodeset into ns))
    :add-edges* (fn [g es] (reduce #(add-multi-edge %1 %2 false) g es))
@@ -513,11 +537,11 @@ on adjacency lists."
 (extend BasicEditableMultiDigraph
   Graph
   {:nodes (fn [g] (:nodeset g))
-          :edges (fn [g] (for [e (multi-all-edge-objects g)] [(src e) (dest e)]))
-          :has-node? (fn [g node] (contains? (:nodeset g) node))
-          :has-edge? (fn [g n1 n2] (seq (get-in g [:adj n1 n2])))
-          :successors* (fn [g node] (keys (get-in g [:adj node])))
-          :out-degree (fn [g node] (reduce + 0 (map count (vals (get-in g [:adj node])))))
+   :edges (fn [g] (for [e (multi-all-edge-objects g)] [(src e) (dest e)]))
+   :has-node? (fn [g node] (contains? (:nodeset g) node))
+   :has-edge? (fn [g n1 n2] (boolean (seq (get-in g [:adj n1 n2]))))
+   :successors* (fn [g node] (keys (get-in g [:adj node])))
+   :out-degree (fn [g node] (reduce + 0 (map count (vals (get-in g [:adj node])))))
    :out-edges (fn [g node] (for [e (multi-edge-objects g node)] [(src e) (dest e)]))}
   MultiGraph
   {:edges-with-ids multi-all-edge-objects
@@ -525,7 +549,7 @@ on adjacency lists."
   WeightedGraph
   {:weight* (fn
               ([g e] (multi-weight g e))
-              ([g n1 n2] (some-> (get-in g [:adj n1 n2]) vals first)))}
+              ([g n1 n2] (minimum-multi-weight g n1 n2)))}
   EditableGraph
   {:add-nodes* (fn [g ns] (update g :nodeset into ns))
    :add-edges* (fn [g es] (reduce #(add-multi-edge %1 %2 true) g es))
@@ -622,7 +646,7 @@ on adjacency lists."
 (defn subgraph
   "Returns a graph with only the given nodes"
   [g ns]
-  (remove-nodes* g (remove (set ns) (nodes g))))
+  (apply remove-nodes g (remove (set ns) (nodes g))))
 
 (defn add-path
   "Adds a path of edges connecting the given nodes in order"

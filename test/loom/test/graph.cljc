@@ -6,13 +6,14 @@
                                       weighted-digraph-from-edges edges-with-ids
                                       out-edges-with-ids edge-key
                                       nodes edges has-node? has-edge? transpose fly-graph
-                                      remove-nodes
+                                      remove-nodes remove-edges
                                       weight graph? Graph directed? Digraph weighted?
                                       WeightedGraph subgraph add-path add-cycle)]
             [loom.attr :as attr]
             #?@(:clj [[clojure.test :refer (deftest testing are is)]])
             [loom.test.compliance-tester :refer [graph-test digraph-test
-                                                 weighted-graph-test weighted-digraph-test]])
+                                                 weighted-graph-test weighted-digraph-test
+                                                 multigraph-test multidigraph-test]])
   #?@(:cljs [(:require-macros [cljs.test :refer (deftest testing are is)])]))
 
 (deftest multigraph-parallel-edge-test
@@ -31,6 +32,21 @@
           g (attr/add-attr g first-edge :label :first-label)]
       (is (= {:label :first-label} (attr/attrs g first-edge)))
       (is (nil? (attr/attr g second-edge :label))))))
+
+(deftest remove-keyed-multigraph-edge-test
+  (let [g (remove-edges (multigraph [1 2] [1 2]) [1 2 0])
+        es (vec (edges-with-ids g))]
+    (is (= 2 (count es)))
+    (is (= #{1} (set (map edge-key es))))
+    (is (= #{[1 2] [2 1]} (set (edges g))))))
+
+(deftest undirected-multigraph-remove-nodes-preserves-record-shape-test
+  (let [fresh (multigraph [:a :b :ab 1])
+        pruned (remove-nodes (multigraph [:a :b :ab 1]
+                                        [:b :c :bc 1])
+                             :c)]
+    (is (= fresh pruned))
+    (is (not (contains? pruned :in)))))
 
 (deftest multidigraph-edge-direction-test
   (let [g (multidigraph [1 2 :a 3] [1 2 :b 4])]
@@ -56,7 +72,9 @@
   (graph-test (graph))
   (digraph-test (digraph))
   (weighted-graph-test (weighted-graph))
-  (weighted-digraph-test (weighted-digraph)))
+  (weighted-digraph-test (weighted-digraph))
+  (multigraph-test (multigraph))
+  (multidigraph-test (multidigraph)))
 
 (deftest build-graph-test
   (let [g1 (graph [1 2] [1 3] [2 3] 4)
@@ -97,6 +115,37 @@
                 (remove-nodes :a))]
       (is (nil? (get-in g [:attrs :a])))
       (is (empty? (attr/attrs g :b :a))))))
+
+(deftest multigraph-remove-nodes-prunes-attrs-test
+  (let [g (multigraph [:a :b :shared 1]
+                      [:b :c :bc 1]
+                      [:c :d :shared 1])
+        edge (first (filter #(= :shared (edge-key %))
+                            (out-edges-with-ids g :a)))
+        surviving-edge (first (filter #(= :shared (edge-key %))
+                                      (out-edges-with-ids g :c)))
+        g (-> g
+              (attr/add-attr :a :color :red)
+              (attr/add-attr edge :kind :rail)
+              (attr/add-attr surviving-edge :kind :road))
+        pruned (remove-nodes g :a)]
+    (is (nil? (get-in pruned [:attrs :a])))
+    (is (nil? (try
+                (attr/attr pruned :a :color)
+                (catch #?(:clj Throwable :cljs :default) _ ::threw))))
+    (is (nil? (get-in pruned [:attrs :b :loom.attr/edge-attrs :shared])))
+    (is (nil? (attr/attr pruned edge :kind)))
+    (is (= :road (attr/attr pruned surviving-edge :kind)))))
+
+(deftest subgraph-prunes-attrs-like-remove-nodes-test
+  (let [g (-> (graph [:a :b] [:b :c])
+              (attr/add-attr :a :color :red)
+              (attr/add-attr [:a :b] :kind :rail))
+        removed (remove-nodes g :a)
+        induced (subgraph g [:b :c])]
+    (is (= (:attrs removed) (:attrs induced)))
+    (is (nil? (get-in induced [:attrs :a])))
+    (is (nil? (attr/attr induced :b :a :kind)))))
 
 (deftest weight-edge-arity-test
   ;; weight on an edge must dispatch to (weight* g e), not (weight* g src dest).

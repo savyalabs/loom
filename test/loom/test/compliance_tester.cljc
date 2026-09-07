@@ -193,3 +193,13 @@
            77 (weight g6 2 1)
            88 (weight g4 6 5)
            1 (weight g4 7 8)))))
+
+(defn multigraph-test
+  "Run the weighted undirected graph contract against a multigraph."
+  [mg]
+  (weighted-graph-test mg))
+
+(defn multidigraph-test
+  "Run the weighted directed graph contract against a multidigraph."
+  [mdg]
+  (weighted-digraph-test mdg))
