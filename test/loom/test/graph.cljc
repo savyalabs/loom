@@ -12,7 +12,8 @@
             [loom.attr :as attr]
             #?@(:clj [[clojure.test :refer (deftest testing are is)]])
             [loom.test.compliance-tester :refer [graph-test digraph-test
-                                                 weighted-graph-test weighted-digraph-test]])
+                                                 weighted-graph-test weighted-digraph-test
+                                                 multigraph-test multidigraph-test]])
   #?@(:cljs [(:require-macros [cljs.test :refer (deftest testing are is)])]))
 
 (deftest multigraph-parallel-edge-test
@@ -71,7 +72,9 @@
   (graph-test (graph))
   (digraph-test (digraph))
   (weighted-graph-test (weighted-graph))
-  (weighted-digraph-test (weighted-digraph)))
+  (weighted-digraph-test (weighted-digraph))
+  (multigraph-test (multigraph))
+  (multidigraph-test (multidigraph)))
 
 (deftest build-graph-test
   (let [g1 (graph [1 2] [1 3] [2 3] 4)

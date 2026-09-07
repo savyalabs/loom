@@ -512,7 +512,7 @@ on adjacency lists."
   {:nodes (fn [g] (:nodeset g))
    :edges (fn [g] (for [e (multi-all-edge-objects g)] [(src e) (dest e)]))
    :has-node? (fn [g node] (contains? (:nodeset g) node))
-   :has-edge? (fn [g n1 n2] (seq (get-in g [:adj n1 n2])))
+   :has-edge? (fn [g n1 n2] (boolean (seq (get-in g [:adj n1 n2]))))
    :successors* (fn [g node] (keys (get-in g [:adj node])))
    :out-degree (fn [g node] (reduce + 0 (map count (vals (get-in g [:adj node])))))
    :out-edges (fn [g node] (for [e (multi-edge-objects g node)] [(src e) (dest e)]))}
@@ -535,7 +535,7 @@ on adjacency lists."
   {:nodes (fn [g] (:nodeset g))
           :edges (fn [g] (for [e (multi-all-edge-objects g)] [(src e) (dest e)]))
           :has-node? (fn [g node] (contains? (:nodeset g) node))
-          :has-edge? (fn [g n1 n2] (seq (get-in g [:adj n1 n2])))
+   :has-edge? (fn [g n1 n2] (boolean (seq (get-in g [:adj n1 n2]))))
           :successors* (fn [g node] (keys (get-in g [:adj node])))
           :out-degree (fn [g node] (reduce + 0 (map count (vals (get-in g [:adj node])))))
    :out-edges (fn [g node] (for [e (multi-edge-objects g node)] [(src e) (dest e)]))}
