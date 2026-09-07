@@ -13,6 +13,8 @@ can use these functions."
                :cljs [tailrecursion.priority-map :as pm])
             [clojure.set :as clj.set]))
 
+#?(:clj (set! *warn-on-reflection* true))
+
 ;;;
 ;;; Convenience wrappers for loom.alg-generic functions
 ;;;
@@ -1007,6 +1009,13 @@ can use these functions."
         iterations (or max-iterations iterations)
         tol (or tolerance tol)
         vs (vec (nodes g))
+        out-degrees (into {} (map (fn [v] [v (count (successors g v))]) vs))
+        predecessors (reduce (fn [result u]
+                               (reduce (fn [result v] (update result v conj u))
+                                       result
+                                       (successors g u)))
+                             (zipmap vs (repeat []))
+                             vs)
         n (count vs)]
     (if (zero? n)
       {}
@@ -1014,18 +1023,16 @@ can use these functions."
              i 0]
         (let [base (/ (- 1.0 damping) n)
               dangling (* damping
-                          (/ (reduce + (for [v vs :when (zero? (count (successors g v)))]
+                          (/ (reduce + (for [v vs :when (zero? (out-degrees v))]
                                          (scores v))) n))
               next-scores
               (into {}
                     (for [v vs]
                       [v (+ base dangling
                             (reduce +
-                                    (for [u vs
-                                          :let [outs (successors g u)]
-                                          :when (some #(= % v) outs)]
-                                      (* damping (scores u) (/ 1.0 (count outs))))))]))
-              delta (reduce max 0 (map #(Math/abs (- (next-scores %) (scores %))) vs))]
+                                    (for [u (predecessors v)]
+                                      (* damping (scores u) (/ 1.0 (out-degrees u))))))]))
+              delta (reduce max 0 (map #(Math/abs (double (- (next-scores %) (scores %)))) vs))]
           (if (or (>= i iterations) (< delta tol))
             next-scores
             (recur next-scores (inc i))))))))

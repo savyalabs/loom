@@ -33,6 +33,42 @@
     (catch #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core/ExceptionInfo) e
       (ex-data e))))
 
+(defn- legacy-pagerank
+  "The pre-optimization PageRank recurrence, retained as a test oracle."
+  [g damping iterations]
+  (let [vs (vec (nodes g))
+        n (count vs)]
+    (if (zero? n)
+      {}
+      (loop [scores (zipmap vs (repeat (/ 1.0 n)))
+             i 0]
+        (let [base (/ (- 1.0 damping) n)
+              dangling (* damping
+                          (/ (reduce + (for [v vs :when (zero? (count (successors g v)))]
+                                         (scores v))) n))
+              next-scores
+              (into {}
+                    (for [v vs]
+                      [v (+ base dangling
+                            (reduce +
+                                    (for [u vs
+                                          :let [outs (successors g u)]
+                                          :when (some #(= % v) outs)]
+                                      (* damping (scores u) (/ 1.0 (count outs))))))]))]
+          (if (>= i iterations)
+            next-scores
+            (recur next-scores (inc i))))))))
+
+(defn- now-ns []
+  #?(:clj (System/nanoTime)
+     :cljs (* 1000000 (js/performance.now))))
+
+(defn- median-ns [f]
+  (let [samples (sort (repeatedly 3 #(let [started (now-ns)]
+                                       (f)
+                                       (- (now-ns) started))))]
+    (second samples)))
+
 ;; http://en.wikipedia.org/wiki/Dijkstra's_algorithm
 (def g1
   (weighted-graph
@@ -764,6 +800,33 @@
     (is (= :h (key (apply max-key val (:hubs (hits hits-graph))))))
     (is (= (set [:a :b :c :h])
            (set (keys (:authorities (hits hits-graph))))))))
+
+(deftest pagerank-preserves-legacy-results-test
+  (let [graphs [(digraph [:a :b] [:b :c] [:c :a] [:c :b])
+                (digraph [:hub :a] [:hub :b] [:hub :c] [:a :hub])
+                (digraph [:a :b] [:b :c] [:c :d] [:d :a])]]
+    (doseq [g graphs]
+      (let [expected (legacy-pagerank g 0.85 5)
+            actual (pagerank g :damping 0.85 :iterations 5 :tol 0.0)]
+        (is (= (set (keys expected)) (set (keys actual))))
+        (is (every? #(< (Math/abs (- (expected %) (actual %))) 1e-10)
+                    (keys expected)))))))
+
+(deftest pagerank-linear-time-benchmark-test
+  (let [node-count 400
+        benchmark-edges (for [node (range node-count)
+                              offset (range 1 5)]
+                          [node (mod (+ node offset) node-count)])
+        benchmark-graph (apply digraph benchmark-edges)]
+    ;; Warm both paths before recording their median timings.
+    (legacy-pagerank benchmark-graph 0.85 5)
+    (pagerank benchmark-graph :damping 0.85 :iterations 5 :tol 0.0)
+    (let [legacy-ns (median-ns #(legacy-pagerank benchmark-graph 0.85 5))
+          optimized-ns (median-ns #(pagerank benchmark-graph :damping 0.85
+                                             :iterations 5 :tol 0.0))]
+      (println (format "PageRank benchmark (400 nodes, 5 iterations): legacy %.2f ms, optimized %.2f ms"
+                       (/ legacy-ns 1000000.0) (/ optimized-ns 1000000.0)))
+      (is (< optimized-ns (* 0.5 legacy-ns))))))
 
 (deftest structural-algorithms-test
   (let [g (graph [:a :b] [:b :c] [:c :a] [:b :d] [:d :e])
