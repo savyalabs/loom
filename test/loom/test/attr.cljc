@@ -1,5 +1,5 @@
 (ns loom.test.attr
-  (:require [loom.graph :refer (digraph graph)]
+  (:require [loom.graph :refer (digraph graph multigraph out-edges-with-ids)]
             [loom.attr :refer (add-attr remove-attr add-attrs-to-all attr
                                add-attr-to-nodes add-attr-to-edges)]
             #?@(:clj [[clojure.test :refer [deftest is]]]))
@@ -48,3 +48,9 @@
               (remove-attr 1 2 :color))]
     (is (nil? (attr g 1 2 :color)))
     (is (nil? (attr g 2 1 :color)))))
+
+(deftest multigraph-attr-arities-share-storage-test
+  (let [g (multigraph [1 2 :edge 1])
+        edge (first (out-edges-with-ids g 1))]
+    (is (= :red (attr (add-attr g 1 2 :color :red) edge :color)))
+    (is (= :rail (attr (add-attr g edge :kind :rail) 1 2 :kind)))))

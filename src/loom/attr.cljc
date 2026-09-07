@@ -56,31 +56,53 @@ loom.graph. Attributes can provide labels and styles (color, thickness, and so o
                ([g node-or-edge k v]
                 (if (has-node? g node-or-edge)
                   (assoc-in g [:attrs node-or-edge k] v)
-                  (let [n1 (src node-or-edge) n2 (dest node-or-edge) ek (graph/edge-key node-or-edge)
+                  (let [n1 (src node-or-edge)
+                        n2 (dest node-or-edge)
+                        ek (graph/edge-key node-or-edge)
                         g (assoc-in g [:attrs n1 ::edge-attrs ek k] v)]
                     (if (directed? g) g
                         (assoc-in g [:attrs n2 ::edge-attrs ek k] v)))))
                ([g n1 n2 k v]
-                (assoc-in g [:attrs n1 ::edge-attrs n2 k] v)))
+                (reduce (fn [g ek]
+                          (let [g (assoc-in g [:attrs n1 ::edge-attrs ek k] v)]
+                            (if (directed? g) g
+                                (assoc-in g [:attrs n2 ::edge-attrs ek k] v))))
+                        g
+                        (keys (get-in g [:adj n1 n2])))))
    :remove-attr (fn
                   ([g node-or-edge k]
                    (if (has-node? g node-or-edge)
                      (update-in g [:attrs node-or-edge] dissoc k)
-                     (update-in g [:attrs (src node-or-edge) ::edge-attrs (graph/edge-key node-or-edge)] dissoc k)))
+                     (let [n1 (src node-or-edge)
+                           n2 (dest node-or-edge)
+                           ek (graph/edge-key node-or-edge)
+                           g (update-in g [:attrs n1 ::edge-attrs ek] dissoc k)]
+                       (if (directed? g) g
+                           (update-in g [:attrs n2 ::edge-attrs ek] dissoc k)))))
                   ([g n1 n2 k]
-                   (update-in g [:attrs n1 ::edge-attrs n2] dissoc k)))
+                   (reduce (fn [g ek]
+                             (let [g (update-in g [:attrs n1 ::edge-attrs ek] dissoc k)]
+                               (if (directed? g) g
+                                   (update-in g [:attrs n2 ::edge-attrs ek] dissoc k))))
+                           g
+                           (keys (get-in g [:adj n1 n2])))))
    :attr (fn
            ([g node-or-edge k]
             (if (has-node? g node-or-edge)
               (get-in g [:attrs node-or-edge k])
               (get-in g [:attrs (src node-or-edge) ::edge-attrs (graph/edge-key node-or-edge) k])))
-           ([g n1 n2 k] (get-in g [:attrs n1 ::edge-attrs n2 k])))
+           ([g n1 n2 k]
+            (when-let [ek (first (filter #(contains? (get-in g [:attrs n1 ::edge-attrs %]) k)
+                                         (keys (get-in g [:adj n1 n2]))))]
+              (get-in g [:attrs n1 ::edge-attrs ek k]))))
    :attrs (fn
             ([g node-or-edge]
              (if (has-node? g node-or-edge)
                (dissoc (get-in g [:attrs node-or-edge]) ::edge-attrs)
                (get-in g [:attrs (src node-or-edge) ::edge-attrs (graph/edge-key node-or-edge)])))
-            ([g n1 n2] (get-in g [:attrs n1 ::edge-attrs n2])))})
+            ([g n1 n2]
+             (some #(not-empty (get-in g [:attrs n1 ::edge-attrs %]))
+                   (keys (get-in g [:adj n1 n2])))))})
 
 (extend loom.graph.BasicEditableGraph
   AttrGraph
