@@ -117,20 +117,25 @@
       (is (empty? (attr/attrs g :b :a))))))
 
 (deftest multigraph-remove-nodes-prunes-attrs-test
-  (let [g (multigraph [:a :b :ab 1]
-                      [:b :c :bc 1])
-        edge (first (filter #(= :ab (edge-key %))
+  (let [g (multigraph [:a :b :shared 1]
+                      [:b :c :bc 1]
+                      [:c :d :shared 1])
+        edge (first (filter #(= :shared (edge-key %))
                             (out-edges-with-ids g :a)))
+        surviving-edge (first (filter #(= :shared (edge-key %))
+                                      (out-edges-with-ids g :c)))
         g (-> g
               (attr/add-attr :a :color :red)
-              (attr/add-attr edge :kind :rail))
+              (attr/add-attr edge :kind :rail)
+              (attr/add-attr surviving-edge :kind :road))
         pruned (remove-nodes g :a)]
     (is (nil? (get-in pruned [:attrs :a])))
     (is (nil? (try
                 (attr/attr pruned :a :color)
                 (catch #?(:clj Throwable :cljs :default) _ ::threw))))
-    (is (nil? (get-in pruned [:attrs :b :loom.attr/edge-attrs :ab])))
-    (is (nil? (attr/attr pruned edge :kind)))))
+    (is (nil? (get-in pruned [:attrs :b :loom.attr/edge-attrs :shared])))
+    (is (nil? (attr/attr pruned edge :kind)))
+    (is (= :road (attr/attr pruned surviving-edge :kind)))))
 
 (deftest subgraph-prunes-attrs-like-remove-nodes-test
   (let [g (-> (graph [:a :b] [:b :c])

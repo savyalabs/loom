@@ -122,20 +122,24 @@ on adjacency lists."
   [g removed]
   (let [removed (set removed)
         multigraph? (satisfies? MultiGraph g)
-        removed-edge-keys
+        removed-edge-keys-by-node
         (when multigraph?
-          (into #{} (for [[n1 nbrs] (:adj g)
-                          [n2 keyed] nbrs
-                          :when (or (removed n1) (removed n2))
-                          k (keys keyed)]
-                      k)))
-        edge-attr-keys (if multigraph? removed-edge-keys removed)]
+          (into {} (keep (fn [[node nbrs]]
+                           (let [ks (into #{} (for [[n2 keyed] nbrs
+                                                   :when (contains? removed n2)
+                                                   k (keys keyed)]
+                                               k))]
+                             (when (seq ks) [node ks]))))
+                (:adj g)))]
     (persistent!
      (reduce-kv
       (fn [m node amap]
-        (if (removed node)
+        (if (contains? removed node)
           m
-          (let [ea (get amap :loom.attr/edge-attrs)
+          (let [edge-attr-keys (if multigraph?
+                                 (get removed-edge-keys-by-node node)
+                                 removed)
+                ea (get amap :loom.attr/edge-attrs)
                 ea (when ea (apply dissoc ea edge-attr-keys))]
             (assoc! m node (if (seq ea)
                              (assoc amap :loom.attr/edge-attrs ea)
@@ -533,11 +537,11 @@ on adjacency lists."
 (extend BasicEditableMultiDigraph
   Graph
   {:nodes (fn [g] (:nodeset g))
-          :edges (fn [g] (for [e (multi-all-edge-objects g)] [(src e) (dest e)]))
-          :has-node? (fn [g node] (contains? (:nodeset g) node))
+   :edges (fn [g] (for [e (multi-all-edge-objects g)] [(src e) (dest e)]))
+   :has-node? (fn [g node] (contains? (:nodeset g) node))
    :has-edge? (fn [g n1 n2] (boolean (seq (get-in g [:adj n1 n2]))))
-          :successors* (fn [g node] (keys (get-in g [:adj node])))
-          :out-degree (fn [g node] (reduce + 0 (map count (vals (get-in g [:adj node])))))
+   :successors* (fn [g node] (keys (get-in g [:adj node])))
+   :out-degree (fn [g node] (reduce + 0 (map count (vals (get-in g [:adj node])))))
    :out-edges (fn [g node] (for [e (multi-edge-objects g node)] [(src e) (dest e)]))}
   MultiGraph
   {:edges-with-ids multi-all-edge-objects
