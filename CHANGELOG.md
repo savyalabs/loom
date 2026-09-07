@@ -1,5 +1,48 @@
 # Change Log
 
+## [1.4.1] - 2026-09-07
+
+### Fixed
+
+Found by two independent senior-model code reviews (Codex + Claude), each
+verified by execution against the affected functions before any fix landed.
+
+- `johnson` never applied the Bellman-Ford reweighting correction, silently
+  returning wrong all-pairs shortest-path distances for any weighted graph
+  (`all-pairs-shortest-paths` dispatches here). The existing test fixture
+  asserted the wrong values - corrected alongside the fix.
+- `betweenness-centrality` silently ignored edge weights (plain BFS
+  hop-counting even on weighted input) and was cubic. Rewritten using
+  Brandes' algorithm: correct on weighted graphs, O(VE) instead of O(V^3).
+- `weight*` on multigraphs NPE'd on plain `[u v]` edge vectors, or picked an
+  arbitrary parallel edge instead of the minimum, breaking every weighted
+  algorithm (dijkstra/astar/johnson/bellman-ford/max-flow) on multidigraphs.
+- `remove-edges` on a multigraph deleted every parallel edge instead of the
+  one targeted by edge-key.
+- `astar-path` returned non-shortest paths for admissible-but-inconsistent
+  heuristics; fixed via standard node reopening.
+- `bf-path` returned `nil` for `start = end` instead of the zero-hop path,
+  inconsistent with `bf-path-bi`/`dijkstra-path`.
+- `network-simplex/solve` misreported an unbounded negative-cost cycle as a
+  finite optimum, and its "infinity" sentinel silently became `0` on an
+  all-zero-magnitude graph (Clojure's `0` is truthy, so `(or (* 3 (max ...))
+  1)` never fell through).
+- `articulation-points`/`bridges`/`tarjan-blocks`/`digraph-all-cycles` used
+  direct recursion, stack-overflowing on graphs beyond a few thousand nodes.
+  Converted to an explicit-stack iterative walk.
+- `remove-attr` was asymmetric on undirected graphs; multigraph edge
+  attributes were split-brain across two storage keys; `subgraph` bypassed
+  attribute pruning; `remove-multi-nodes` added a spurious `:in` key on
+  undirected multigraphs.
+- `clustering-coefficient` threw on weighted graphs; `bellman-ford` threw on
+  `FlyGraph`; `clustering-coefficient`/`density` divided by zero on
+  empty/singleton graphs.
+- `pagerank` was O(iterations x V x (V+E)) instead of O(iterations x
+  (V+E)) - measured 51-142x speedup after precomputing reverse adjacency.
+
+`compliance_tester.cljc` now also exercises multigraph/multidigraph against
+the shared protocol contracts, the root cause behind several of the above.
+
 ## [1.4.0] - 2026-08-27
 
 ### Added
