@@ -39,6 +39,14 @@
     (is (= #{1} (set (map edge-key es))))
     (is (= #{[1 2] [2 1]} (set (edges g))))))
 
+(deftest undirected-multigraph-remove-nodes-preserves-record-shape-test
+  (let [fresh (multigraph [:a :b :ab 1])
+        pruned (remove-nodes (multigraph [:a :b :ab 1]
+                                        [:b :c :bc 1])
+                             :c)]
+    (is (= fresh pruned))
+    (is (not (contains? pruned :in)))))
+
 (deftest multidigraph-edge-direction-test
   (let [g (multidigraph [1 2 :a 3] [1 2 :b 4])]
     (is (= 2 (count (out-edges-with-ids g 1))))

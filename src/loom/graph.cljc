@@ -499,11 +499,13 @@ on adjacency lists."
   (let [removed (set ns)
         strip (fn [adj]
                 (into {} (map (fn [[n nbrs]]
-                                [n (apply dissoc nbrs removed)]) adj)))]
-    (assoc (assoc (assoc g
-                         :nodeset (apply disj (:nodeset g) removed))
-                  :adj (strip (apply dissoc (:adj g) removed)))
-           :in (when directed? (strip (apply dissoc (:in g) removed))))))
+                                [n (apply dissoc nbrs removed)]) adj)))
+        g (assoc g
+                 :nodeset (apply disj (:nodeset g) removed)
+                 :adj (strip (apply dissoc (:adj g) removed)))]
+    (if directed?
+      (assoc g :in (strip (apply dissoc (:in g) removed)))
+      g)))
 
 (extend BasicEditableMultiGraph
   Graph
