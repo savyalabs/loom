@@ -28,6 +28,30 @@
     (assert-graph-equivalent g (loom-io/read-graphml f))
     (is (= "red" (attr (loom-io/read-graphml f) "a" :color)))))
 
+(deftest graphml-rejects-external-entities
+  (let [payload (str "<?xml version=\"1.0\"?>"
+                    "<!DOCTYPE graphml ["
+                    "<!ENTITY xxe SYSTEM \"file:///etc/passwd\">"
+                    "]>"
+                    "<graphml xmlns=\"http://graphml.graphdrawing.org/xmlns\">"
+                    "<graph id=\"G\" edgedefault=\"directed\">"
+                    "<node id=\"n0\" label=\"&xxe;\"/>"
+                    "</graph>"
+                    "</graphml>")]
+    (is (thrown? Exception (loom-io/read-graphml payload)))))
+
+(deftest xml-parser-explicitly-disables-external-entities
+  (let [harden-xml-factory (ns-resolve 'loom.io 'harden-xml-factory)
+        factory (javax.xml.parsers.DocumentBuilderFactory/newInstance)]
+    (is (some? harden-xml-factory))
+    (when harden-xml-factory
+      (let [hardened (harden-xml-factory factory)]
+        (is (.getFeature hardened "http://apache.org/xml/features/disallow-doctype-decl"))
+        (is (not (.getFeature hardened "http://xml.org/sax/features/external-general-entities")))
+        (is (not (.getFeature hardened "http://xml.org/sax/features/external-parameter-entities")))
+        (is (false? (.isXIncludeAware hardened)))
+        (is (false? (.isExpandEntityReferences hardened)))))))
+
 (deftest gexf-round-trip
   (let [g (-> (weighted-graph ["a" "b" 3] ["b" "c" 4])
               (add-attr "b" :label "middle")

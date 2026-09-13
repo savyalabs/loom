@@ -154,8 +154,29 @@
                keys-xml "<graph id=\"G\" edgedefault=\"" (if (directed? g) "directed" "undirected") "\">"
                "<nodes>" node-xml "</nodes><edges>" edge-xml "</edges></graph></graphml>"))))
 
+(def ^:private xml-parser-logger
+  (java.util.logging.Logger/getLogger "loom.io"))
+
+(defn- set-xml-feature [factory feature enabled]
+  (try
+    (.setFeature factory feature enabled)
+    (catch javax.xml.parsers.ParserConfigurationException e
+      (.warning xml-parser-logger
+                (str "XML parser does not support security feature " feature
+                     ": " (.getMessage e)))))
+  factory)
+
+(defn- harden-xml-factory [factory]
+  (-> factory
+      (set-xml-feature "http://apache.org/xml/features/disallow-doctype-decl" true)
+      (set-xml-feature "http://xml.org/sax/features/external-general-entities" false)
+      (set-xml-feature "http://xml.org/sax/features/external-parameter-entities" false)
+      (doto (.setXIncludeAware false)
+            (.setExpandEntityReferences false))))
+
 (defn- xml-document [source]
-  (let [factory (javax.xml.parsers.DocumentBuilderFactory/newInstance)
+  (let [factory (harden-xml-factory
+                 (javax.xml.parsers.DocumentBuilderFactory/newInstance))
         builder (.newDocumentBuilder factory)]
     (.parse builder (cond
                       (instance? java.io.File source) source
