@@ -64,7 +64,7 @@
 
 (defn- now-ns []
   #?(:clj (System/nanoTime)
-     :cljs (* 1000000 (js/performance.now))))
+     :cljs (js* "Number(process.hrtime.bigint())")))
 
 (defn- median-ns [f]
   (let [samples (sort (repeatedly 3 #(let [started (now-ns)]
@@ -848,7 +848,8 @@
     (is (= 2 (radius path)))
     (is (= 3 (diameter path)))
     (is (= (/ 2 3.0) (get (betweenness-centrality path) :b)))
-    (is (= 1/2 (get (closeness-centrality path) :a)))
+    (is (= #?(:clj 1/2 :cljs (/ 1 2))
+           (get (closeness-centrality path) :a)))
     (is (= (get (eigenvector-centrality star) :a)
            (get (eigenvector-centrality star) :b)))
     (is (= :c (key (apply max-key val (eigenvector-centrality star)))))
@@ -879,8 +880,9 @@
     (let [legacy-ns (median-ns #(legacy-pagerank benchmark-graph 0.85 5))
           optimized-ns (median-ns #(pagerank benchmark-graph :damping 0.85
                                              :iterations 5 :tol 0.0))]
-      (println (format "PageRank benchmark (400 nodes, 5 iterations): legacy %.2f ms, optimized %.2f ms"
-                       (/ legacy-ns 1000000.0) (/ optimized-ns 1000000.0)))
+      (println "PageRank benchmark (400 nodes, 5 iterations):"
+               (/ legacy-ns 1000000.0) "ms legacy,"
+               (/ optimized-ns 1000000.0) "ms optimized")
       (is (< optimized-ns (* 0.5 legacy-ns))))))
 
 (deftest weighted-betweenness-centrality-test

@@ -293,10 +293,17 @@ See [Loom TODO board](https://trello.com/b/VgPZkvjP/loom-todo).
 ## Testing
 
 ```bash
+# JVM tests
 clojure -M:test
+
+# ClojureScript tests (compiled and run with Node.js)
+clojure -M:test-cljs
+
 clojure -T:build jar
 clojure -T:build deploy
 ```
+
+Both test suites are gated in CI.
 
 ## Contributors
 

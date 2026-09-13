@@ -521,8 +521,8 @@ on adjacency lists."
    :out-degree (fn [g node] (reduce + 0 (map count (vals (get-in g [:adj node])))))
    :out-edges (fn [g node] (for [e (multi-edge-objects g node)] [(src e) (dest e)]))}
   MultiGraph
-  {:edges-with-ids multi-all-edge-objects
-   :out-edges-with-ids multi-edge-objects}
+  {:edges-with-ids (fn [g] (multi-all-edge-objects g))
+   :out-edges-with-ids (fn [g node] (multi-edge-objects g node))}
   WeightedGraph
   {:weight* (fn
               ([g e] (multi-weight g e))
@@ -544,8 +544,8 @@ on adjacency lists."
    :out-degree (fn [g node] (reduce + 0 (map count (vals (get-in g [:adj node])))))
    :out-edges (fn [g node] (for [e (multi-edge-objects g node)] [(src e) (dest e)]))}
   MultiGraph
-  {:edges-with-ids multi-all-edge-objects
-   :out-edges-with-ids multi-edge-objects}
+  {:edges-with-ids (fn [g] (multi-all-edge-objects g))
+   :out-edges-with-ids (fn [g node] (multi-edge-objects g node))}
   WeightedGraph
   {:weight* (fn
               ([g e] (multi-weight g e))
