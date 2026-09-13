@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Added a ClojureScript test runner and CI job to verify ClojureScript-specific
+  correctness claims across all portable test namespaces.
+
 Found by two independent senior-model code reviews (Codex + Claude), each
 verified by execution against the affected functions before any fix landed.
 

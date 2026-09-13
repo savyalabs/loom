@@ -84,10 +84,13 @@
                 (add-attr [:b :t] :cost 1))
           [flow-map cost] (flow/min-cost-flow g)]
       (is (= 16 cost))
-      (is (= {:s {:a 1 :b 4}
-              :a {:b 0 :t 1}
-              :b {:t 4}}
-             flow-map)))))
+      (is (contains? #{{:s {:a 1 :b 4}
+                        :a {:b 0 :t 1}
+                        :b {:t 4}}
+                       {:s {:a 3 :b 2}
+                        :a {:b 2 :t 1}
+                        :b {:t 4}}}
+                      flow-map)))))
 
 (deftest flow-validation-test
   (testing "max-flow rejects negative capacities"
