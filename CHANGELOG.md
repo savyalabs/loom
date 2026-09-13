@@ -1,11 +1,34 @@
 # Change Log
 
+## [1.4.2] - 2026-09-13
+
+### Security
+
+- `loom.io`'s XML graph readers (GraphML/GEXF) parsed input with no XXE
+  hardening, allowing external entity resolution - a real SSRF/local-file-
+  disclosure vector for a library whose job is parsing externally-sourced
+  graph files. `DocumentBuilderFactory` now disallows DOCTYPE declarations
+  and external general/parameter entities. Found by an independent Codex +
+  agy code audit ahead of the clj-commons transfer.
+
+### Added
+
+- A real ClojureScript test runner (`clojure -M:test-cljs`, deps.edn-native,
+  compiles and runs under Node.js) and a matching CI job, replacing a dead
+  `doo`-based runner that couldn't even compile (`doo` was never a
+  dependency) and only covered 7 of 11 test namespaces. This closes a real
+  correctness-verification gap: every ClojureScript-specific bug fix claimed
+  in earlier changelog entries (`transpose`, `remove-nodes`/`subgraph`,
+  `loom.gen`'s seeded PRNG) was previously unverified by any executable
+  test. Fixing the runner surfaced one genuine bug it was hiding: multigraph
+  and multidigraph `extend-protocol` blocks passed bare var references
+  (`multi-all-edge-objects`, `multi-edge-objects`) as protocol method impls
+  instead of wrapping them in `fn` - broken under ClojureScript's protocol
+  dispatch, now fixed in `loom.graph`.
+
 ## [1.4.1] - 2026-09-07
 
 ### Fixed
-
-- Added a ClojureScript test runner and CI job to verify ClojureScript-specific
-  correctness claims across all portable test namespaces.
 
 Found by two independent senior-model code reviews (Codex + Claude), each
 verified by execution against the affected functions before any fix landed.
